@@ -1,0 +1,2 @@
+# wagdoc
+Dockerized Wagtail
