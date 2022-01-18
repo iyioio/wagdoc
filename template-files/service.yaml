@@ -1,0 +1,18 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: [[SERVICE]]
+spec:
+  template:
+    spec:
+      serviceAccountName: [[SERVICE_ACCOUNT]]
+      containers:
+      - env:
+        - name: GS_BUCKET_NAME
+          value: [[BUCKET_NAME]]
+        - name: [[PASSWORD_VAR]]
+          valueFrom:
+            secretKeyRef:
+              key: 'latest'
+              name: [[SECRET_NAME]]
+        image: [[IMAGE]]

@@ -1,0 +1,14 @@
+{
+    "name":"my-wag",
+    "project":"my-project",
+    "region":"europe-west1",
+    "force":true,
+    "public":true,
+    "dbEngine":"pgsql",
+    "dbName":"mydb",
+    "dbInstance":"mysql",
+    "dbUser":"mydbuser",
+    "dbPasswordEnvVar":"wagpassword",
+    "dbHost":"10.9.10.3",
+    "dbPort":5432
+}
