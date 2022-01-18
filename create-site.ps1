@@ -5,9 +5,14 @@ param(
     [int]$step=-1, # -1 == all steps
     [string]$dest,
     [switch]$recreateDbuser,
-    [swifth]$deployNoBuild
+    [switch]$deployNoBuild,
+    [switch]$getDbPassword
 )
 $ErrorActionPreference="Stop"
+
+if($getDbPassword){
+    $step=-2
+}
 
 $config=Get-Content -Path $configPath -Raw | ConvertFrom-Json
 
@@ -359,38 +364,42 @@ try{
         SetServcieEmail
     }
 
-    if($step -eq -1 -or $step -eq 35){
+    if($step -eq -1 -or $step -eq 4){
         CreateSecrets
     }else{
         LoadSecrets
     }
 
-    if($step -eq -1 -or $step -eq 4){
+    if($step -eq -1 -or $step -eq 5){
         ApplyServiceAccount
     }
 
-    if($step -eq -1 -or $step -eq 5){
+    if($step -eq -1 -or $step -eq 6){
         CreateDbUser
     }
 
-    if($step -eq -1 -or $step -eq 6){
+    if($step -eq -1 -or $step -eq 7){
         CreateBucket
     }
 
-    if($step -eq -1 -or $step -eq 7){
+    if($step -eq -1 -or $step -eq 8){
         SetBucketCors
     }
 
-    if($step -eq -1 -or $step -eq 8){
+    if($step -eq -1 -or $step -eq 9){
         CreateConector
     }
 
-    if($step -eq -1 -or $step -eq 9){
+    if($step -eq -1 -or $step -eq 10){
         Deploy
     }
 
-    if($step -eq -1 -or $step -eq 10){
+    if($step -eq -1 -or $step -eq 11){
         EnablePublic
+    }
+
+    if($getDbPassword){
+        Write-Host "dbPassword:$dbPassword"
     }
 
 }finally{
