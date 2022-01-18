@@ -8,7 +8,7 @@
     "dbName":"mydb",
     "dbInstance":"mysql",
     "dbUser":"mydbuser",
-    "dbPasswordEnvVar":"wagpassword",
     "dbHost":"10.9.10.3",
-    "dbPort":5432
+    "dbPort":5432,
+    "network":"default"
 }

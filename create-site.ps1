@@ -3,7 +3,9 @@ param(
     [string]$configPath=$(throw "-configPath required"),
     [switch]$noLogin,
     [int]$step=-1, # -1 == all steps
-    [string]$dest
+    [string]$dest,
+    [switch]$recreateDbuser,
+    [swifth]$deployNoBuild
 )
 $ErrorActionPreference="Stop"
 
@@ -40,14 +42,17 @@ $project=$config.project
 $region=$config.region
 $serviceName="$name-wag"
 $serviceAccountName="wag-$name-sa"
+$connectorName="wag-$name-conn"
 $serviceEmail=''
 $bucketName="$project-media"
+$dbPassword=''
+$secretKey=''
 $dir=Resolve-Path -Path "$(Split-Path $configPath)/$name"
 if($dest){
     $dir=Resolve-Path -Path $dest
 }
 $templDir="$PSScriptRoot/template-files"
-$passwordSecretName="wag-$name-db-pass"
+$secretName="wag-$name"
 
 function GeneratePassword {
 
@@ -88,6 +93,7 @@ function Step1-CreateSiteTemplate{
     try{
 
         echo "django-storages[google]==1.12.3" > "$name-requirements.txt"
+        echo "django-environ==0.8.1" >> "$name-requirements.txt"
         if($config.dbEngine -eq "pgsql"){
             echo "psycopg2-binary==2.9.2" >> "$name-requirements.txt"
         }
@@ -104,23 +110,23 @@ function Step1-CreateSiteTemplate{
         Pop-Location
     }
 
-    mv "$dir/$name/settings/base.py" "$dir/$name/settings/basesettings.py" 
-    if(!$?){throw "move base settings failed"}
-
     [string]$engine
     if($config.dbEngine -eq 'pgsql'){
         $engine='django.db.backends.postgresql_psycopg2'
     }
 
-    $settings=Get-Content -Path "$templDir/base.py" -Raw
-    $settings=$settings.Replace('[[ENGINE]]',$engine)
-    $settings=$settings.Replace('[[NAME]]',$config.dbName)
-    $settings=$settings.Replace('[[USER]]',$config.dbUser)
-    $settings=$settings.Replace('[[PASSWORD_VAR]]',$config.dbPasswordEnvVar)
-    $settings=$settings.Replace('[[HOST]]',$config.dbHost)
-    $settings=$settings.Replace("'[[PORT]]'",$config.dbPort)
+    echo "" >> "$dir/.dockerignore"
+    echo "# local" >> "$dir/.dockerignore"
+    echo "/policy.yaml" >> "$dir/.dockerignore"
+    echo "/service.yaml" >> "$dir/.dockerignore"
+    echo "/deploy-gcloud.sh" >> "$dir/.dockerignore"
+    echo "/cors.json" >> "$dir/.dockerignore"
+    echo "/.env-secrets" >> "$dir/.dockerignore"
 
-    Set-Content -Path "$dir/$name/settings/base.py" -Value $settings
+    mv "$dir/$name/settings/base.py" "$dir/$name/settings/basesettings.py" 
+    if(!$?){throw "move base settings failed"}
+
+    cp "$templDir/base.py" "$dir/$name/settings/base.py"
     if(!$?){throw "Copy base settings failed"}
 
     $dockerfile=Get-Content -Path "$dir/Dockerfile" -Raw
@@ -132,10 +138,15 @@ function Step1-CreateSiteTemplate{
 
     $service=Get-Content -Path "$templDir/service.yaml" -Raw
     $service=$service.Replace('[[SERVICE]]',$serviceName)
+    $service=$service.Replace('[[CONNECTOR_NAME]]',$connectorName)
     $service=$service.Replace('[[IMAGE]]',"gcr.io/$($config.project)/$name-image:latest")
-    $service=$service.Replace('[[PASSWORD_VAR]]',$config.dbPasswordEnvVar)
-    $service=$service.Replace('[[SECRET_NAME]]',$passwordSecretName)
+    $service=$service.Replace('[[SECRET_NAME]]',$secretName)
     $service=$service.Replace('[[BUCKET_NAME]]',$bucketName)
+    $service=$service.Replace('[[ENGINE]]',$engine)
+    $service=$service.Replace('[[NAME]]',$config.dbName)
+    $service=$service.Replace('[[USER]]',$config.dbUser)
+    $service=$service.Replace('[[HOST]]',$config.dbHost)
+    $service=$service.Replace('[[PORT]]',$config.dbPort)
     Set-Content -Path "$dir/service.yaml" -Value $service
 
     if($config.public){
@@ -193,9 +204,46 @@ function Step3-CreateServiceAccount{
 
 }
 
-function Step4-ApplyServiceAccount{
+function LoadSecrets{
+    $content=(gcloud secrets versions access latest --secret=$secretName | Join-String -Separator "`n").Split("`n")
 
-    Write-Host "Step4-ApplyServiceAccount" -ForegroundColor Cyan
+    $vars=@{}
+
+    foreach($line in $content){
+        $parts=$line.Split('=',2)
+        $vars[$parts[0]]=$parts[1]
+    }
+
+    $script:dbPassword=$vars.WAG_PASSWORD
+    $script:secretKey=$vars.SECRET_KEY
+
+}
+
+function CreateSecrets{
+
+    try{
+        echo "WAG_PASSWORD=$(GeneratePassword)" > "$dir/.env-secrets"
+        echo "SECRET_KEY=$(GeneratePassword -length 60)" >> "$dir/.env-secrets"
+
+        gcloud secrets delete $secretName
+
+        gcloud secrets create $secretName --data-file "$dir/.env-secrets"
+        if(!$?){throw "create db user password secret failed"}
+
+        gcloud secrets add-iam-policy-binding $secretName `
+            --member serviceAccount:$serviceEmail --role roles/secretmanager.secretAccessor
+        if(!$?){throw "Grant service account access to password secret failed"}
+
+    }finally{
+        rm -f "$dir/.env-secrets"
+    }
+
+    LoadSecrets
+}
+
+function ApplyServiceAccount{
+
+    Write-Host "ApplyServiceAccount" -ForegroundColor Cyan
 
     $service=Get-Content -Path "$dir/service.yaml" -Raw
     $service=$service.Replace('[[SERVICE_ACCOUNT]]',$serviceEmail)
@@ -203,55 +251,72 @@ function Step4-ApplyServiceAccount{
 
 }
 
-function Step5-CreateDbUser{
+function CreateDbUser{
 
-    Write-Host "Step5-CreateDbUser" -ForegroundColor Cyan
+    Write-Host "CreateDbUser" -ForegroundColor Cyan
 
-    $dbPass=GeneratePassword
+    $existing=gcloud sql users list --instance alfasql --filter $config.dbUser --format "value(name)"
 
-    gcloud secrets delete $passwordSecretName
-
-    printf $dbPass | gcloud secrets create $passwordSecretName --data-file=-
-    if(!$?){throw "create db user password secret failed"}
-
-    gcloud secrets add-iam-policy-binding $passwordSecretName `
-        --member serviceAccount:$serviceEmail --role roles/secretmanager.secretAccessor
-    if(!$?){throw "Grant service account access to password secret failed"}
-
-    gcloud sql users create $config.dbUser --instance $config.dbInstance --password $dbPass
-    if(!$?){throw "create db user failed"}
+    if($existing){
+        if($recreateDbuser){
+            gcloud sql users delete $config.dbUser --instance $config.dbInstance
+            if(!$?){throw "delete db user failed"}
+        }else{
+            gcloud sql users set-password $config.dbUser --instance $config.dbInstance --password $dbPassword
+            if(!$?){throw "update db user password failed"}
+        }
+    }else{
+        gcloud sql users create $config.dbUser --instance $config.dbInstance --password $dbPassword
+        if(!$?){throw "create db user failed"}
+    }
 
 }
 
-function Step6-CreateBucket{
+function CreateBucket{
 
-    Write-Host "Step6-CreateBucket" -ForegroundColor Cyan
+    Write-Host "CreateBucket" -ForegroundColor Cyan
 
     gsutil mb -l $region "gs://$bucketName"
     if(!$?){throw "gcloud create bucket failed"}
 
 }
 
-function Step7-SetBucketCors{
+function SetBucketCors{
 
-    Write-Host "Step7-SetBucketCors" -ForegroundColor Cyan
+    Write-Host "SetBucketCors" -ForegroundColor Cyan
 
     gsutil cors set cors.json "gs://$bucketName"
     if(!$?){throw "Configure bucket CORS failed"}
 
 }
 
-function Step8-Deploy{
+function CreateConector{
 
-    Write-Host "Step8-Deploy" -ForegroundColor Cyan
+    Write-Host "CreateConector" -ForegroundColor Cyan
     
-    ./deploy-gcloud.sh
+    gcloud compute networks vpc-access connectors create $connectorName `
+        --network $config.network `
+        --region $config.region `
+        --range $config.ipRange
+    if(!$?){throw "gcloud compute networks vpc-access connectors create failed"}
+
+}
+
+function Deploy{
+
+    Write-Host "Deploy" -ForegroundColor Cyan
+    
+    if($deployNoBuild){
+        ./deploy-gcloud.sh no-build
+    }else{
+        ./deploy-gcloud.sh
+    }
     if(!$?){throw "deploy-gcloud.sh failed"}
 }
 
-function Step9-EnablePublic{
+function EnablePublic{
 
-    Write-Host "Step9-EnablePublic" -ForegroundColor Cyan
+    Write-Host "EnablePublic" -ForegroundColor Cyan
 
     if($config.public){
         gcloud run services set-iam-policy $serviceName policy.yaml
@@ -294,28 +359,38 @@ try{
         SetServcieEmail
     }
 
+    if($step -eq -1 -or $step -eq 35){
+        CreateSecrets
+    }else{
+        LoadSecrets
+    }
+
     if($step -eq -1 -or $step -eq 4){
-        Step4-ApplyServiceAccount
+        ApplyServiceAccount
     }
 
     if($step -eq -1 -or $step -eq 5){
-        Step5-CreateDbUser
+        CreateDbUser
     }
 
     if($step -eq -1 -or $step -eq 6){
-        Step6-CreateBucket
+        CreateBucket
     }
 
     if($step -eq -1 -or $step -eq 7){
-        Step7-SetBucketCors
+        SetBucketCors
     }
 
     if($step -eq -1 -or $step -eq 8){
-        Step8-Deploy
+        CreateConector
     }
 
     if($step -eq -1 -or $step -eq 9){
-        Step9-EnablePublic
+        Deploy
+    }
+
+    if($step -eq -1 -or $step -eq 10){
+        EnablePublic
     }
 
 }finally{

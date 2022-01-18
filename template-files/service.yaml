@@ -4,15 +4,33 @@ metadata:
   name: [[SERVICE]]
 spec:
   template:
+    metadata:
+      annotations:
+        run.googleapis.com/vpc-access-connector: [[CONNECTOR_NAME]]
     spec:
       serviceAccountName: [[SERVICE_ACCOUNT]]
       containers:
       - env:
-        - name: GS_BUCKET_NAME
-          value: [[BUCKET_NAME]]
-        - name: [[PASSWORD_VAR]]
-          valueFrom:
-            secretKeyRef:
-              key: 'latest'
-              name: [[SECRET_NAME]]
+        - name: WAG_BUCKET_NAME
+          value: '[[BUCKET_NAME]]'
+        - name: WAG_ENGINE
+          value: '[[ENGINE]]'
+        - name: WAG_NAME
+          value: '[[NAME]]'
+        - name: WAG_USER
+          value: '[[USER]]'
+        - name: WAG_HOST
+          value: '[[HOST]]'
+        - name: WAG_PORT
+          value: '[[PORT]]'
         image: [[IMAGE]]
+        volumeMounts:
+        - mountPath: /appvar
+          name: APPLICATION_SECRETS_VOL
+      volumes:
+      - name: APPLICATION_SECRETS_VOL
+        secret:
+          items:
+          - key: latest
+            path: APPLICATION_SECRETS
+          secretName: [[SECRET_NAME]]
