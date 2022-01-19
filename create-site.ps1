@@ -8,6 +8,8 @@ param(
     [switch]$recreateDbuser,
     [switch]$deployNoBuild,
     [switch]$getSecrets,
+    [switch]$getUrl,
+    [switch]$getServiceInfo,
     [switch]$overrideTemplate,
     [switch]$skipSetProjectRegion
 )
@@ -15,10 +17,6 @@ $ErrorActionPreference="Stop"
 
 if($allSteps){
     $step=-1
-}
-
-if($getSecrets){
-    $step=-2
 }
 
 $config=Get-Content -Path $configPath -Raw | ConvertFrom-Json
@@ -410,7 +408,7 @@ function GetServiceInfo{
 function InvokeUtilManage{
 
     param(
-        $args
+        [string[]]$commandArgs
     )
 
     $url=GetServiceInfo -prop url
@@ -418,7 +416,7 @@ function InvokeUtilManage{
 
     $JSON = @{
         "key" = $vars.MANAGE_SECRET_KEY
-        "args" = $args
+        "args" = $commandArgs
     } | ConvertTo-Json
 
     Invoke-RestMethod -Uri "$url/util-manage" -Method Post -Body $JSON -ContentType "application/json"
@@ -429,7 +427,7 @@ function Migrate{
 
     Write-Host "Migrate" -ForegroundColor Cyan
 
-    InvokeUtilManage -args @("migrate","--noinput")
+    InvokeUtilManage -commandArgs @("migrate","--noinput")
     
 }
 
@@ -437,7 +435,7 @@ function CollectStatic{
 
     Write-Host "CollectStatic" -ForegroundColor Cyan
 
-    InvokeUtilManage -args @("collectstatic","--noinput")
+    InvokeUtilManage -commandArgs @("collectstatic","--noinput")
 
 }
 
@@ -522,6 +520,14 @@ try{
 
     if($getSecrets){
         LoadSecrets -print
+    }
+
+    if($getUrl){
+        GetServiceInfo -prop url
+    }
+
+    if($getServiceInfo){
+        GetServiceInfo
     }
 
 }finally{
