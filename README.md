@@ -7,16 +7,16 @@ The create-site.ps1 script creates a wagtail site and all needed GCloud resource
 
 Run all steps 
 ``` sh
-./create-site.ps1 -configPath ./example-config.json -dest sites/test-site
+./create-site.ps1 -configPath ./example-config.json -allSteps
 
 ```
 
 Run a single step
 ``` sh
-./create-site.ps1 -configPath ./example-config.json -dest sites/test-site -step 2
+./create-site.ps1 -configPath ./example-config.json -step 2
 ```
 
 Run a single step and skip gcloud login
 ``` sh
-./create-site.ps1 -configPath ./example-config.json -dest sites/test-site -step 2 -noLogin
+./create-site.ps1 -configPath ./example-config.json -step 2 -noLogin
 ```
