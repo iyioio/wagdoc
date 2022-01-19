@@ -1,0 +1,15 @@
+{
+    "name":"test1",
+    "project":"alfa-prd",
+    "region":"europe-west1",
+    "public":true,
+    "dbEngine":"pgsql",
+    "dbName":"alfadb",
+    "dbInstance":"alfasql",
+    "dbUser":"alfauser",
+    "dbHost":"10.8.224.7",
+    "dbPort":"5432",
+    "network":"default",
+    "ipRange":"10.8.0.0/28",
+    "debug":true
+}

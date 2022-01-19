@@ -1,0 +1,48 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: test1-wag
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/vpc-access-connector: wag-test1-conn
+    spec:
+      serviceAccountName: wag-test1-sa@alfa-prd.iam.gserviceaccount.com
+      containers:
+      - env:
+        - name: WAG_USE_CONFIG
+          value: '1'
+        - name: WAG_DEBUG
+          value: '1'
+        - name: WAG_BUCKET_NAME
+          value: 'alfa-prd-media'
+        - name: WAG_ENGINE
+          value: 'django.db.backends.postgresql_psycopg2'
+        - name: WAG_NAME
+          value: 'alfadb'
+        - name: WAG_USER
+          value: 'alfauser'
+        - name: WAG_HOST
+          value: '10.8.224.7'
+        - name: WAG_PORT
+          value: '5432'
+        - name: WAG_APP_NAME
+          value: 'test1'
+        - name: ENABLE_MANAGE_ENDPOINT
+          value: '1'
+        - name: _INDEX
+          value: '1'
+        image: gcr.io/alfa-prd/test1-image:latest
+        volumeMounts:
+        - mountPath: /appvar
+          name: APPLICATION_SECRETS_VOL
+      volumes:
+      - name: APPLICATION_SECRETS_VOL
+        secret:
+          items:
+          - key: latest
+            path: .env
+          secretName: wag-test1
+
+
