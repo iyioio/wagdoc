@@ -3,10 +3,11 @@ import os
 from django.core.management import execute_from_command_line
 import urllib.parse
 import environ
+import json
 from .wsgi import application
 
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "test1.settings.dev")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "test1.settings")
 
 def app(requestEnviron, start_response):
 
@@ -18,26 +19,26 @@ def app(requestEnviron, start_response):
         if env("ENABLE_MANAGE_ENDPOINT", default='0') != "1" :
             return application(requestEnviron,start_response)
 
-        query=requestEnviron['QUERY_STRING'].split("&")
+        try:
+            request_body_size = int(requestEnviron.get('CONTENT_LENGTH', 0))
+        except (ValueError):
+            request_body_size = 0
 
-        args={}
-        for q in query:
-            parts=q.split("=",2)
-            args[parts[0]]=urllib.parse.unquote_plus(parts[1])
+        request_body = requestEnviron['wsgi.input'].read(request_body_size).decode("utf-8")
+        request = json.loads(request_body)
 
         key=env("MANAGE_SECRET_KEY", default='')
-
         
 
-        if (not key) or ("key" not in args) or (key != args["key"]) :
+        if (not key) or ("key" not in request) or (key != request["key"]) :
 
             status = "401 Unauthorized"
             data = b'"invalid key"'
 
         else:
 
-            if "args" in args:
-                exeArgs=args["args"].split(",")
+            if "args" in request:
+                exeArgs=request["args"]
                 exeArgs.insert(0,"manage.py")
                 execute_from_command_line(exeArgs)
                 status = "200 OK"

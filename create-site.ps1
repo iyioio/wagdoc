@@ -150,8 +150,9 @@ function Step1-CreateSiteTemplate{
     cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
     if(!$?){throw "Copy manage-app.py failed"}
 
-    cp "$templDir/settings.py" "$dir/$name/settings.py"
-    if(!$?){throw "Copy base.py failed"}
+    $file=Get-Content -Path "$templDir/settings.py" -Raw
+    $file=$file.Replace('[[APP_NAME]]',$name)
+    Set-Content -Path "$dir/$name/settings.py" -Value $file
 
     rm -rf "$dir/$name/settings"
     if(!$?){throw "Remove old settings failed"}
@@ -248,7 +249,8 @@ function Step3-CreateServiceAccount{
 
 function LoadSecrets{
     param(
-        [switch]$print
+        [switch]$print,
+        [switch]$returnVars
     )
     $content=(gcloud secrets versions access latest --secret=$secretName | Join-String -Separator "`n").Split("`n")
 
@@ -264,6 +266,10 @@ function LoadSecrets{
 
     if($print){
         $vars
+    }
+
+    if($returnVars){
+        return $vars
     }
 
 }
@@ -379,10 +385,60 @@ function EnablePublic{
 
     Write-Host "EnablePublic" -ForegroundColor Cyan
 
-    if($config.public){
-        gcloud run services set-iam-policy $serviceName policy.yaml
-        if(!$?){throw "gcloud run services set-iam-policy $serviceName policy.yaml failed"}
+    gcloud run services set-iam-policy $serviceName policy.yaml
+    if(!$?){throw "gcloud run services set-iam-policy $serviceName policy.yaml failed"}
+    
+}
+
+function GetServiceInfo{
+
+    param(
+        [string]$prop
+    )
+
+    $json=gcloud run services describe $serviceName --format=json | ConvertFrom-Json
+
+    if(!$prop){
+        return $json
+    }elseif($prop -eq "url"){
+        return $json.status.url ? $json.status.url : $(throw "status.url not found")
+    }else{
+        throw "Invalid prop - $prop"
     }
+}
+
+function InvokeUtilManage{
+
+    param(
+        $args
+    )
+
+    $url=GetServiceInfo -prop url
+    $vars=LoadSecrets -returnVars
+
+    $JSON = @{
+        "key" = $vars.MANAGE_SECRET_KEY
+        "args" = $args
+    } | ConvertTo-Json
+
+    Invoke-RestMethod -Uri "$url/util-manage" -Method Post -Body $JSON -ContentType "application/json"
+
+}
+
+function Migrate{
+
+    Write-Host "Migrate" -ForegroundColor Cyan
+
+    InvokeUtilManage -args @("migrate","--noinput")
+    
+}
+
+function CollectStatic{
+
+    Write-Host "CollectStatic" -ForegroundColor Cyan
+
+    InvokeUtilManage -args @("collectstatic","--noinput")
+
 }
 
 
@@ -454,6 +510,14 @@ try{
 
     if($step -eq -1 -or $step -eq 11){
         EnablePublic
+    }
+
+    if($step -eq -1 -or $step -eq 12){
+        Migrate
+    }
+
+    if($step -eq -1 -or $step -eq 13){
+        CollectStatic
     }
 
     if($getSecrets){

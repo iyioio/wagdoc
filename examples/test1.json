@@ -2,7 +2,6 @@
     "name":"test1",
     "project":"alfa-prd",
     "region":"europe-west1",
-    "public":true,
     "dbEngine":"pgsql",
     "dbName":"alfadb",
     "dbInstance":"alfasql",
