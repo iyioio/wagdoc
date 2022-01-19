@@ -393,9 +393,9 @@ function ConfigureBucket{
 
 }
 
-function CreateConector{
+function CreateConnector{
 
-    Write-Host "CreateConector" -ForegroundColor Cyan
+    Write-Host "CreateConnector" -ForegroundColor Cyan
 
     $ErrorActionPreference="SilentlyContinue"
     $conInfo=gcloud compute networks vpc-access connectors describe $connectorName --region $config.region 2>&1 | Join-String
@@ -552,7 +552,7 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 10){
-        CreateConector
+        CreateConnector
     }
 
     if($step -eq -1 -or $step -eq 11){
