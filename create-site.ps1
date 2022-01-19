@@ -4,10 +4,11 @@ param(
     [switch]$noLogin,
     [int]$step=-2, # -1 == all steps, -2 == no steps
     [switch]$allSteps,
-    [string]$dest,
     [switch]$recreateDbuser,
     [switch]$deployNoBuild,
     [switch]$getSecrets,
+    [switch]$getUrl,
+    [switch]$getServiceInfo,
     [switch]$overrideTemplate,
     [switch]$skipSetProjectRegion
 )
@@ -15,10 +16,6 @@ $ErrorActionPreference="Stop"
 
 if($allSteps){
     $step=-1
-}
-
-if($getSecrets){
-    $step=-2
 }
 
 $config=Get-Content -Path $configPath -Raw | ConvertFrom-Json
@@ -54,16 +51,16 @@ $project=$config.project
 $region=$config.region
 $serviceName="$name-wag"
 $serviceAccountName="wag-$name-sa"
-$connectorName="wag-$name-conn"
+$connectorName=$config.connector
 $serviceEmail=''
-$bucketName="$project-media"
+$bucketName="$project-$name-media"
 $dbPassword=''
 $secretKey=''
 $templDir="$PSScriptRoot/template-files"
 $secretName="wag-$name"
 
 
-$dir=$dest ? $dest : "$(Split-Path $configPath)/$name"
+$dir="$(Split-Path $configPath)/$name"
 $exists=Test-Path $dir
 if(!$exists){
     mkdir -p $dir
@@ -92,9 +89,9 @@ function GeneratePassword {
     return [System.Text.Encoding]::ASCII.GetString($buf)
 }
 
-function Step1-CreateSiteTemplate{
+function CreateSiteTemplate{
 
-    Write-Host "Step1-CreateSiteTemplate" -ForegroundColor Cyan
+    Write-Host "CreateSiteTemplate" -ForegroundColor Cyan
 
     if($exists){
         if($overrideTemplate){
@@ -147,18 +144,28 @@ function Step1-CreateSiteTemplate{
     cp "$templDir/_.gitignore" "$dir/.gitignore"
     if(!$?){throw "Copy .gitignore failed"}
 
-    cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
-    if(!$?){throw "Copy manage-app.py failed"}
+    cp "$templDir/api.py" "$dir/$name/api.py"
+    if(!$?){throw "Copy api.py failed"}
 
-    cp "$templDir/settings.py" "$dir/$name/settings.py"
-    if(!$?){throw "Copy base.py failed"}
+    $file=Get-Content -Path "$templDir/manage-app.py" -Raw
+    $file=$file.Replace('[[APP_NAME]]',$name)
+    Set-Content -Path "$dir/$name/manage-app.py" -Value $file
+
+    $file=Get-Content -Path "$templDir/settings.py" -Raw
+    $file=$file.Replace('[[APP_NAME]]',$name)
+    Set-Content -Path "$dir/$name/settings.py" -Value $file
 
     rm -rf "$dir/$name/settings"
     if(!$?){throw "Remove old settings failed"}
 
+    echo '' >> "$dir/$name/urls.py"
+    echo 'from .api import api_router' >> "$dir/$name/urls.py"
+    echo 'urlpatterns = [path("api/v2/", api_router.urls)] + urlpatterns' >> "$dir/$name/urls.py"
+    echo '' >> "$dir/$name/urls.py"
+
     $dockerfile=Get-Content -Path "$dir/Dockerfile" -Raw
     $dockerfile=$dockerfile -replace 'CMD (.*)',('# CMD $1'+"`n`nCMD set -xe; gunicorn --bind 0.0.0.0:`$PORT --workers 1 --threads 8 --timeout 0 $name.manage-app:app")
-    #$dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
+    $dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
     Set-Content -Path "$dir/Dockerfile" -Value $dockerfile
 
     $file=Get-Content -Path "$dir/manage.py" -Raw
@@ -191,9 +198,8 @@ function Step1-CreateSiteTemplate{
     $service=$service.Replace('[[PORT]]',$config.dbPort)
     Set-Content -Path "$dir/service.yaml" -Value $service
 
-    if($config.public){
-        cp "$templDir/policy.yaml" "$dir/policy.yaml"
-    }
+    cp "$templDir/policy.yaml" "$dir/policy.yaml"
+    if(!$?){throw "Copy policy.yaml failed"}
 
     $deployScript=Get-Content -Path "$templDir/deploy-gcloud.sh" -Raw
     $deployScript=$deployScript.Replace('[[TAG]]',"$name-image")
@@ -203,9 +209,9 @@ function Step1-CreateSiteTemplate{
 
 }
 
-function Step2-EnableApis{
+function EnableApis{
 
-    Write-Host "Step2-EnableApis" -ForegroundColor Cyan
+    Write-Host "EnableApis" -ForegroundColor Cyan
 
     # enable required APIs
     gcloud services enable `
@@ -225,18 +231,17 @@ function SetServcieEmail{
     if(!$?){throw "get service account email failed"}
 }
 
-function Step3-CreateServiceAccount{
+function CreateServiceAccount{
 
-    Write-Host "Step3-CreateServiceAccount" -ForegroundColor Cyan
+    Write-Host "CreateServiceAccount" -ForegroundColor Cyan
 
     SetServcieEmail
 
     if(!$serviceEmail){
         gcloud iam service-accounts create $serviceAccountName
         if(!$?){throw "create service account failed"}
+        SetServcieEmail
     }
-
-    SetServcieEmail
 
     gcloud projects add-iam-policy-binding $project `
         --member serviceAccount:$serviceEmail `
@@ -248,7 +253,8 @@ function Step3-CreateServiceAccount{
 
 function LoadSecrets{
     param(
-        [switch]$print
+        [switch]$print,
+        [switch]$returnVars
     )
     $content=(gcloud secrets versions access latest --secret=$secretName | Join-String -Separator "`n").Split("`n")
 
@@ -264,6 +270,10 @@ function LoadSecrets{
 
     if($print){
         $vars
+    }
+
+    if($returnVars){
+        return $vars
     }
 
 }
@@ -304,11 +314,29 @@ function ApplyServiceAccount{
 
 }
 
+function CreateDb{
+
+    Write-Host "CreateDb" -ForegroundColor Cyan
+
+    $ErrorActionPreference="SilentlyContinue"
+    gcloud sql databases describe $config.dbName --instance $config.dbInstance 2>&1 | Out-Null
+    $result=$?
+    $ErrorActionPreference="Stop"
+
+    if(!$result){
+        Write-Host "Creating db $($config.dbName)"
+        gcloud sql databases create $config.dbName --instance $config.dbInstance
+        if(!$?){throw "create db failed"}
+    }else{
+        Write-Host "Db already exists $($config.dbName)"
+    }
+}
+
 function CreateDbUser{
 
     Write-Host "CreateDbUser" -ForegroundColor Cyan
 
-    $existing=gcloud sql users list --instance alfasql --filter $config.dbUser --format "value(name)"
+    $existing=gcloud sql users list --instance $config.dbInstance --filter $config.dbUser --format "value(name)"
 
     if($existing){
         if($recreateDbuser){
@@ -334,24 +362,43 @@ function CreateBucket{
 
 }
 
-function SetBucketCors{
+function ConfigureBucket{
 
-    Write-Host "SetBucketCors" -ForegroundColor Cyan
+    Write-Host "ConfigureBucket" -ForegroundColor Cyan
 
     gsutil cors set cors.json "gs://$bucketName"
     if(!$?){throw "Configure bucket CORS failed"}
+
+    gsutil iam ch allUsers:objectViewer "gs://$bucketName"
+    if(!$?){throw "Configure bucket permissions failed"}
+    Write-Host "Bucket is now public"
+
+    gsutil iam ch "serviceAccount:$($serviceEmail):objectAdmin" "gs://$bucketName"
+    if(!$?){throw "Configure bucket permissions for service account failed"}
+    Write-Host "$serviceEmail now has full access to bucket"
 
 }
 
 function CreateConector{
 
     Write-Host "CreateConector" -ForegroundColor Cyan
+
+    $ErrorActionPreference="SilentlyContinue"
+    $conInfo=gcloud compute networks vpc-access connectors describe $connectorName --region $config.region 2>&1 | Join-String
+    $result=$?
+    $ErrorActionPreference="Stop"
     
-    gcloud compute networks vpc-access connectors create $connectorName `
-        --network $config.network `
-        --region $config.region `
-        --range $config.ipRange
-    if(!$?){throw "gcloud compute networks vpc-access connectors create failed"}
+    if(!$result){
+        Write-Host "Creating connector - $connectorName - $($config.network) - $($config.ipRange)"
+        gcloud compute networks vpc-access connectors create $connectorName `
+            --network $config.network `
+            --region $config.region `
+            --range $config.ipRange
+        if(!$?){throw "gcloud compute networks vpc-access connectors create failed"}
+    }else{
+        Write-Host "Connector already exists connector - $connectorName"
+        $conInfo
+    }
 
 }
 
@@ -371,15 +418,65 @@ function EnablePublic{
 
     Write-Host "EnablePublic" -ForegroundColor Cyan
 
-    if($config.public){
-        gcloud run services set-iam-policy $serviceName policy.yaml
-        if(!$?){throw "gcloud run services set-iam-policy $serviceName policy.yaml failed"}
+    gcloud run services set-iam-policy $serviceName "$dir/policy.yaml"
+    if(!$?){throw "gcloud run services set-iam-policy $serviceName policy.yaml failed"}
+    
+}
+
+function GetServiceInfo{
+
+    param(
+        [string]$prop
+    )
+
+    $json=gcloud run services describe $serviceName --format=json | ConvertFrom-Json
+
+    if(!$prop){
+        return $json
+    }elseif($prop -eq "url"){
+        return $json.status.url ? $json.status.url : $(throw "status.url not found")
+    }else{
+        throw "Invalid prop - $prop"
     }
+}
+
+function InvokeUtilManage{
+
+    param(
+        [string[]]$commandArgs
+    )
+
+    $url=GetServiceInfo -prop url
+    $vars=LoadSecrets -returnVars
+
+    $JSON = @{
+        "key" = $vars.MANAGE_SECRET_KEY
+        "args" = $commandArgs
+    } | ConvertTo-Json
+
+    Invoke-RestMethod -Uri "$url/util-manage" -Method Post -Body $JSON -ContentType "application/json"
+
+}
+
+function Migrate{
+
+    Write-Host "Migrate" -ForegroundColor Cyan
+
+    InvokeUtilManage -commandArgs @("migrate","--noinput")
+    
+}
+
+function CollectStatic{
+
+    Write-Host "CollectStatic" -ForegroundColor Cyan
+
+    InvokeUtilManage -commandArgs @("collectstatic","--noinput")
+
 }
 
 
 if($step -eq -1 -or $step -eq 1){
-    Step1-CreateSiteTemplate
+    CreateSiteTemplate
 
     if($step -eq 1){
         Write-Host "Complete" -ForegroundColor DarkGreen
@@ -405,18 +502,18 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 2){
-        Step2-EnableApis
+        EnableApis
     }
 
     if($step -eq -1 -or $step -eq 3){
-        Step3-CreateServiceAccount
+        CreateServiceAccount
     }else{
         SetServcieEmail
     }
 
     if($step -eq -1 -or $step -eq 4){
         CreateSecrets
-    }else{
+    }elseif($step -gt 4 -or $step -eq -2){
         LoadSecrets
     }
 
@@ -425,31 +522,51 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 6){
-        CreateDbUser
+        CreateDb
     }
 
     if($step -eq -1 -or $step -eq 7){
-        CreateBucket
+        CreateDbUser
     }
 
     if($step -eq -1 -or $step -eq 8){
-        SetBucketCors
+        CreateBucket
     }
 
     if($step -eq -1 -or $step -eq 9){
-        CreateConector
+        ConfigureBucket
     }
 
     if($step -eq -1 -or $step -eq 10){
-        Deploy
+        CreateConector
     }
 
     if($step -eq -1 -or $step -eq 11){
+        Deploy
+    }
+
+    if($step -eq -1 -or $step -eq 12){
         EnablePublic
+    }
+
+    if($step -eq -1 -or $step -eq 13){
+        Migrate
+    }
+
+    if($step -eq -1 -or $step -eq 14){
+        CollectStatic
     }
 
     if($getSecrets){
         LoadSecrets -print
+    }
+
+    if($getUrl){
+        GetServiceInfo -prop url
+    }
+
+    if($getServiceInfo){
+        GetServiceInfo
     }
 
 }finally{
