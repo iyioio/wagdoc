@@ -37,3 +37,6 @@ urlpatterns = urlpatterns + [
     # of your site, rather than the site root:
     #    path("pages/", include(wagtail_urls)),
 ]
+
+from .api import api_router
+urlpatterns = [path("api/v2/", api_router.urls)] + urlpatterns 

@@ -145,6 +145,9 @@ function Step1-CreateSiteTemplate{
     cp "$templDir/_.gitignore" "$dir/.gitignore"
     if(!$?){throw "Copy .gitignore failed"}
 
+    cp "$templDir/api.py" "$dir/$name/api.py"
+    if(!$?){throw "Copy api.py failed"}
+
     cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
     if(!$?){throw "Copy manage-app.py failed"}
 
@@ -154,6 +157,11 @@ function Step1-CreateSiteTemplate{
 
     rm -rf "$dir/$name/settings"
     if(!$?){throw "Remove old settings failed"}
+
+    echo '' >> "$dir/$name/urls.py"
+    echo 'from .api import api_router' >> "$dir/$name/urls.py"
+    echo 'urlpatterns = [path("api/v2/", api_router.urls)] + urlpatterns' >> "$dir/$name/urls.py"
+    echo '' >> "$dir/$name/urls.py"
 
     $dockerfile=Get-Content -Path "$dir/Dockerfile" -Raw
     $dockerfile=$dockerfile -replace 'CMD (.*)',('# CMD $1'+"`n`nCMD set -xe; gunicorn --bind 0.0.0.0:`$PORT --workers 1 --threads 8 --timeout 0 $name.manage-app:app")

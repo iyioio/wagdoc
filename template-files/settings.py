@@ -35,6 +35,9 @@ if env('WAG_USE_CONFIG', default='0') == "1" :
     if appName not in INSTALLED_APPS:
         INSTALLED_APPS += [appName] # for custom data migration
 
+    if 'wagtail.api.v2' not in INSTALLED_APPS:
+        INSTALLED_APPS += ['wagtail.api.v2']
+
     # Define static storage via django-storages[google]
     GS_BUCKET_NAME = env("WAG_BUCKET_NAME")
     STATICFILES_DIRS = []
