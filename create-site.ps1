@@ -215,6 +215,7 @@ function EnableApis{
 
     # enable required APIs
     gcloud services enable `
+        vpcaccess.googleapis.com `
         run.googleapis.com `
         sql-component.googleapis.com `
         sqladmin.googleapis.com `
@@ -237,14 +238,27 @@ function CreateServiceAccount{
 
     SetServcieEmail
 
-    if(!$serviceEmail){
+    if(!$script:serviceEmail){
         gcloud iam service-accounts create $serviceAccountName
         if(!$?){throw "create service account failed"}
+
         SetServcieEmail
+
+        $attempt=0
+        while(!$script:serviceEmail){
+            sleep 2
+            SetServcieEmail
+            $attempt++
+            if($attempt -gt 10){
+                throw "Taking to long to get service account info"
+            }
+        }
+
+        Write-Host "service account - $script:serviceEmail" -ForegroundColor Cyan
     }
 
     gcloud projects add-iam-policy-binding $project `
-        --member serviceAccount:$serviceEmail `
+        --member serviceAccount:$script:serviceEmail `
         --role roles/cloudsql.client
     if(!$?){throw "Grant service account access to db failed"}
 
@@ -557,11 +571,11 @@ try{
         CollectStatic
     }
 
-    if($getSecrets){
+    if($getSecrets -or $allSteps){
         LoadSecrets -print
     }
 
-    if($getUrl){
+    if($getUrl -or $allSteps){
         GetServiceInfo -prop url
     }
 
