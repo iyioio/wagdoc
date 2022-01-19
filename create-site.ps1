@@ -4,7 +4,6 @@ param(
     [switch]$noLogin,
     [int]$step=-2, # -1 == all steps, -2 == no steps
     [switch]$allSteps,
-    [string]$dest,
     [switch]$recreateDbuser,
     [switch]$deployNoBuild,
     [switch]$getSecrets,
@@ -61,7 +60,7 @@ $templDir="$PSScriptRoot/template-files"
 $secretName="wag-$name"
 
 
-$dir=$dest ? $dest : "$(Split-Path $configPath)/$name"
+$dir="$(Split-Path $configPath)/$name"
 $exists=Test-Path $dir
 if(!$exists){
     mkdir -p $dir
@@ -90,9 +89,9 @@ function GeneratePassword {
     return [System.Text.Encoding]::ASCII.GetString($buf)
 }
 
-function Step1-CreateSiteTemplate{
+function CreateSiteTemplate{
 
-    Write-Host "Step1-CreateSiteTemplate" -ForegroundColor Cyan
+    Write-Host "CreateSiteTemplate" -ForegroundColor Cyan
 
     if($exists){
         if($overrideTemplate){
@@ -148,8 +147,9 @@ function Step1-CreateSiteTemplate{
     cp "$templDir/api.py" "$dir/$name/api.py"
     if(!$?){throw "Copy api.py failed"}
 
-    cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
-    if(!$?){throw "Copy manage-app.py failed"}
+    $file=Get-Content -Path "$templDir/manage-app.py" -Raw
+    $file=$file.Replace('[[APP_NAME]]',$name)
+    Set-Content -Path "$dir/$name/manage-app.py" -Value $file
 
     $file=Get-Content -Path "$templDir/settings.py" -Raw
     $file=$file.Replace('[[APP_NAME]]',$name)
@@ -210,9 +210,9 @@ function Step1-CreateSiteTemplate{
 
 }
 
-function Step2-EnableApis{
+function EnableApis{
 
-    Write-Host "Step2-EnableApis" -ForegroundColor Cyan
+    Write-Host "EnableApis" -ForegroundColor Cyan
 
     # enable required APIs
     gcloud services enable `
@@ -232,18 +232,17 @@ function SetServcieEmail{
     if(!$?){throw "get service account email failed"}
 }
 
-function Step3-CreateServiceAccount{
+function CreateServiceAccount{
 
-    Write-Host "Step3-CreateServiceAccount" -ForegroundColor Cyan
+    Write-Host "CreateServiceAccount" -ForegroundColor Cyan
 
     SetServcieEmail
 
     if(!$serviceEmail){
         gcloud iam service-accounts create $serviceAccountName
         if(!$?){throw "create service account failed"}
+        SetServcieEmail
     }
-
-    SetServcieEmail
 
     gcloud projects add-iam-policy-binding $project `
         --member serviceAccount:$serviceEmail `
@@ -320,11 +319,16 @@ function CreateDb{
 
     Write-Host "CreateDb" -ForegroundColor Cyan
 
+    $ErrorActionPreference="SilentlyContinue"
     gcloud sql databases describe $config.dbName --instance $config.dbInstance 2>&1 | Out-Null
+    $ErrorActionPreference="Stop"
 
     if(!$?){
+        Write-Host "Creating db $($config.dbName)"
         gcloud sql databases create $config.dbName --instance $config.dbInstance
         if(!$?){throw "create db failed"}
+    }else{
+        Write-Host "Db already exists $($config.dbName)"
     }
 }
 
@@ -461,7 +465,7 @@ function CollectStatic{
 
 
 if($step -eq -1 -or $step -eq 1){
-    Step1-CreateSiteTemplate
+    CreateSiteTemplate
 
     if($step -eq 1){
         Write-Host "Complete" -ForegroundColor DarkGreen
@@ -487,18 +491,18 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 2){
-        Step2-EnableApis
+        EnableApis
     }
 
     if($step -eq -1 -or $step -eq 3){
-        Step3-CreateServiceAccount
+        CreateServiceAccount
     }else{
         SetServcieEmail
     }
 
     if($step -eq -1 -or $step -eq 4){
         CreateSecrets
-    }else{
+    }elseif($step -gt 4 -or $step -eq -2){
         LoadSecrets
     }
 
