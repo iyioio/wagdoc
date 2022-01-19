@@ -56,7 +56,7 @@ $serviceName="$name-wag"
 $serviceAccountName="wag-$name-sa"
 $connectorName="wag-$name-conn"
 $serviceEmail=''
-$bucketName="$project-media"
+$bucketName="$project-$name-media"
 $dbPassword=''
 $secretKey=''
 $templDir="$PSScriptRoot/template-files"
@@ -158,7 +158,7 @@ function Step1-CreateSiteTemplate{
 
     $dockerfile=Get-Content -Path "$dir/Dockerfile" -Raw
     $dockerfile=$dockerfile -replace 'CMD (.*)',('# CMD $1'+"`n`nCMD set -xe; gunicorn --bind 0.0.0.0:`$PORT --workers 1 --threads 8 --timeout 0 $name.manage-app:app")
-    #$dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
+    $dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
     Set-Content -Path "$dir/Dockerfile" -Value $dockerfile
 
     $file=Get-Content -Path "$dir/manage.py" -Raw
@@ -334,12 +334,20 @@ function CreateBucket{
 
 }
 
-function SetBucketCors{
+function ConfigureBucket{
 
-    Write-Host "SetBucketCors" -ForegroundColor Cyan
+    Write-Host "ConfigureBucket" -ForegroundColor Cyan
 
     gsutil cors set cors.json "gs://$bucketName"
     if(!$?){throw "Configure bucket CORS failed"}
+
+    gsutil iam ch allUsers:objectViewer "gs://$bucketName"
+    if(!$?){throw "Configure bucket permissions failed"}
+    Write-Host "Bucket is now public"
+
+    gsutil iam ch "serviceAccount:$($serviceEmail):objectAdmin" "gs://$bucketName"
+    if(!$?){throw "Configure bucket permissions for service account failed"}
+    Write-Host "$serviceEmail now has full access to bucket"
 
 }
 
@@ -433,7 +441,7 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 8){
-        SetBucketCors
+        ConfigureBucket
     }
 
     if($step -eq -1 -or $step -eq 9){

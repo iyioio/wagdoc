@@ -16,7 +16,7 @@ spec:
         - name: WAG_DEBUG
           value: '1'
         - name: WAG_BUCKET_NAME
-          value: 'alfa-prd-media'
+          value: 'alfa-prd-test1-media'
         - name: WAG_ENGINE
           value: 'django.db.backends.postgresql_psycopg2'
         - name: WAG_NAME
@@ -32,7 +32,7 @@ spec:
         - name: ENABLE_MANAGE_ENDPOINT
           value: '1'
         - name: _INDEX
-          value: '1'
+          value: '6'
         image: gcr.io/alfa-prd/test1-image:latest
         volumeMounts:
         - mountPath: /appvar
