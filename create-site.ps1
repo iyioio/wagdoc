@@ -2,15 +2,22 @@
 param(
     [string]$configPath=$(throw "-configPath required"),
     [switch]$noLogin,
-    [int]$step=-1, # -1 == all steps
+    [int]$step=-2, # -1 == all steps, -2 == no steps
+    [switch]$allSteps,
     [string]$dest,
     [switch]$recreateDbuser,
     [switch]$deployNoBuild,
-    [switch]$getDbPassword
+    [switch]$getSecrets,
+    [switch]$overrideTemplate,
+    [switch]$skipSetProjectRegion
 )
 $ErrorActionPreference="Stop"
 
-if($getDbPassword){
+if($allSteps){
+    $step=-1
+}
+
+if($getSecrets){
     $step=-2
 }
 
@@ -52,12 +59,19 @@ $serviceEmail=''
 $bucketName="$project-media"
 $dbPassword=''
 $secretKey=''
-$dir=Resolve-Path -Path "$(Split-Path $configPath)/$name"
-if($dest){
-    $dir=Resolve-Path -Path $dest
-}
 $templDir="$PSScriptRoot/template-files"
 $secretName="wag-$name"
+
+
+$dir=$dest ? $dest : "$(Split-Path $configPath)/$name"
+$exists=Test-Path $dir
+if(!$exists){
+    mkdir -p $dir
+}
+$dir=Resolve-Path -Path $dir
+
+
+if(!$?){throw "mkdir failed"}
 
 function GeneratePassword {
 
@@ -82,16 +96,14 @@ function Step1-CreateSiteTemplate{
 
     Write-Host "Step1-CreateSiteTemplate" -ForegroundColor Cyan
 
-    if(Test-Path $dir){
-        if($config.force){
+    if($exists){
+        if($overrideTemplate){
             rm -rf $dir
+            mkdir -p $dir
         }else{
             throw "Site directory already exists - $dir"
         }
     }
-
-    mkdir -p $dir
-    if(!$?){throw "mkdir failed"}
 
     Push-Location (Split-Path $dir)
 
@@ -128,20 +140,42 @@ function Step1-CreateSiteTemplate{
     echo "/cors.json" >> "$dir/.dockerignore"
     echo "/.env-secrets" >> "$dir/.dockerignore"
 
-    mv "$dir/$name/settings/base.py" "$dir/$name/settings/basesettings.py" 
-    if(!$?){throw "move base settings failed"}
+    $file=Get-Content -Path "$dir/$name/settings/base.py" -Raw
+    $file=$file -replace 'PROJECT_DIR\s=','PROJECT_DIR = os.path.dirname(os.path.abspath(__file__)) #'
+    Set-Content -Path "$dir/$name/basesettings.py" -Value $file
 
-    cp "$templDir/base.py" "$dir/$name/settings/base.py"
-    if(!$?){throw "Copy base settings failed"}
+    cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
+    if(!$?){throw "Copy manage-app.py failed"}
+
+    cp "$templDir/settings.py" "$dir/$name/settings.py"
+    if(!$?){throw "Copy base.py failed"}
+
+    rm -rf "$dir/$name/settings"
+    if(!$?){throw "Remove old settings failed"}
 
     $dockerfile=Get-Content -Path "$dir/Dockerfile" -Raw
-    $dockerfile=$dockerfile -replace 'CMD (.*)',('# CMD $1'+"`n`nCMD set -xe; gunicorn --bind 0.0.0.0:`$PORT --workers 1 --threads 8 --timeout 0 $name.wsgi:application")
-    $dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
+    $dockerfile=$dockerfile -replace 'CMD (.*)',('# CMD $1'+"`n`nCMD set -xe; gunicorn --bind 0.0.0.0:`$PORT --workers 1 --threads 8 --timeout 0 $name.manage-app:app")
+    #$dockerfile=$dockerfile -replace '(RUN python manage.py collectstatic.*)','# $1'
     Set-Content -Path "$dir/Dockerfile" -Value $dockerfile
 
+    $file=Get-Content -Path "$dir/manage.py" -Raw
+    $file=$file.Replace("$name.settings.dev","$name.settings")
+    Set-Content -Path "$dir/manage.py" -Value $file
+
+    $file=Get-Content -Path "$dir/$name/wsgi.py" -Raw
+    $file=$file.Replace("$name.settings.dev","$name.settings")
+    Set-Content -Path "$dir/$name/wsgi.py" -Value $file
+
     cp "$templDir/cors.json" "$dir/cors.json"
+    if(!$?){throw "Copy cors.json failed"}
+
+    mkdir "$dir/$name/migrations"
+    touch "$dir/$name/migrations/__init__.py"
+    cp "$templDir/0001_createsuperuser.py" "$dir/$name/migrations/0001_createsuperuser.py"
 
     $service=Get-Content -Path "$templDir/service.yaml" -Raw
+    $service=$service.Replace('[[APP_NAME]]',$name)
+    $service=$service.Replace('[[DEBUG]]',$config.debug ? "1" : "0")
     $service=$service.Replace('[[SERVICE]]',$serviceName)
     $service=$service.Replace('[[CONNECTOR_NAME]]',$connectorName)
     $service=$service.Replace('[[IMAGE]]',"gcr.io/$($config.project)/$name-image:latest")
@@ -210,6 +244,9 @@ function Step3-CreateServiceAccount{
 }
 
 function LoadSecrets{
+    param(
+        [switch]$print
+    )
     $content=(gcloud secrets versions access latest --secret=$secretName | Join-String -Separator "`n").Split("`n")
 
     $vars=@{}
@@ -222,13 +259,21 @@ function LoadSecrets{
     $script:dbPassword=$vars.WAG_PASSWORD
     $script:secretKey=$vars.SECRET_KEY
 
+    if($print){
+        $vars
+    }
+
 }
 
 function CreateSecrets{
 
+    Write-Host "CreateSecrets" -ForegroundColor Cyan
+
     try{
         echo "WAG_PASSWORD=$(GeneratePassword)" > "$dir/.env-secrets"
         echo "SECRET_KEY=$(GeneratePassword -length 60)" >> "$dir/.env-secrets"
+        echo "MANAGE_SECRET_KEY=$(GeneratePassword -length 60)" >> "$dir/.env-secrets"
+        echo "WAG_ADMIN_PASSWORD=$(GeneratePassword -length 20)" >> "$dir/.env-secrets"
 
         gcloud secrets delete $secretName
 
@@ -348,11 +393,13 @@ try{
         if(!$?){throw "gcloud login failed"}
     }
 
-    gcloud config set project $project
-    if(!$?){throw "set gcloud project failed"}
+    if(!$skipSetProjectRegion){
+        gcloud config set project $project
+        if(!$?){throw "set gcloud project failed"}
 
-    gcloud config set run/region $config.region
-    if(!$?){throw "set gcloud run region failed"}
+        gcloud config set run/region $config.region
+        if(!$?){throw "set gcloud run region failed"}
+    }
 
     if($step -eq -1 -or $step -eq 2){
         Step2-EnableApis
@@ -398,8 +445,8 @@ try{
         EnablePublic
     }
 
-    if($getDbPassword){
-        Write-Host "dbPassword:$dbPassword"
+    if($getSecrets){
+        LoadSecrets -print
     }
 
 }finally{
