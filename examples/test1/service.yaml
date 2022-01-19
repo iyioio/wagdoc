@@ -6,7 +6,7 @@ spec:
   template:
     metadata:
       annotations:
-        run.googleapis.com/vpc-access-connector: wag-test1-conn
+        run.googleapis.com/vpc-access-connector: default-europe-west1
     spec:
       serviceAccountName: wag-test1-sa@alfa-prd.iam.gserviceaccount.com
       containers:

@@ -9,6 +9,7 @@
     "dbHost":"10.8.224.7",
     "dbPort":"5432",
     "network":"default",
+    "connector":"default-europe-west1",
     "ipRange":"10.8.0.0/28",
     "debug":true
 }

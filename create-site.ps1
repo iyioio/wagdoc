@@ -51,7 +51,7 @@ $project=$config.project
 $region=$config.region
 $serviceName="$name-wag"
 $serviceAccountName="wag-$name-sa"
-$connectorName="wag-$name-conn"
+$connectorName=$config.connector
 $serviceEmail=''
 $bucketName="$project-$name-media"
 $dbPassword=''
@@ -198,9 +198,8 @@ function CreateSiteTemplate{
     $service=$service.Replace('[[PORT]]',$config.dbPort)
     Set-Content -Path "$dir/service.yaml" -Value $service
 
-    if($config.public){
-        cp "$templDir/policy.yaml" "$dir/policy.yaml"
-    }
+    cp "$templDir/policy.yaml" "$dir/policy.yaml"
+    if(!$?){throw "Copy policy.yaml failed"}
 
     $deployScript=Get-Content -Path "$templDir/deploy-gcloud.sh" -Raw
     $deployScript=$deployScript.Replace('[[TAG]]',"$name-image")
@@ -321,9 +320,10 @@ function CreateDb{
 
     $ErrorActionPreference="SilentlyContinue"
     gcloud sql databases describe $config.dbName --instance $config.dbInstance 2>&1 | Out-Null
+    $result=$?
     $ErrorActionPreference="Stop"
 
-    if(!$?){
+    if(!$result){
         Write-Host "Creating db $($config.dbName)"
         gcloud sql databases create $config.dbName --instance $config.dbInstance
         if(!$?){throw "create db failed"}
@@ -382,12 +382,23 @@ function ConfigureBucket{
 function CreateConector{
 
     Write-Host "CreateConector" -ForegroundColor Cyan
+
+    $ErrorActionPreference="SilentlyContinue"
+    $conInfo=gcloud compute networks vpc-access connectors describe $connectorName --region $config.region 2>&1 | Join-String
+    $result=$?
+    $ErrorActionPreference="Stop"
     
-    gcloud compute networks vpc-access connectors create $connectorName `
-        --network $config.network `
-        --region $config.region `
-        --range $config.ipRange
-    if(!$?){throw "gcloud compute networks vpc-access connectors create failed"}
+    if(!$result){
+        Write-Host "Creating connector - $connectorName - $($config.network) - $($config.ipRange)"
+        gcloud compute networks vpc-access connectors create $connectorName `
+            --network $config.network `
+            --region $config.region `
+            --range $config.ipRange
+        if(!$?){throw "gcloud compute networks vpc-access connectors create failed"}
+    }else{
+        Write-Host "Connector already exists connector - $connectorName"
+        $conInfo
+    }
 
 }
 
@@ -407,7 +418,7 @@ function EnablePublic{
 
     Write-Host "EnablePublic" -ForegroundColor Cyan
 
-    gcloud run services set-iam-policy $serviceName policy.yaml
+    gcloud run services set-iam-policy $serviceName "$dir/policy.yaml"
     if(!$?){throw "gcloud run services set-iam-policy $serviceName policy.yaml failed"}
     
 }
