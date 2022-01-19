@@ -144,6 +144,9 @@ function Step1-CreateSiteTemplate{
     $file=$file -replace 'PROJECT_DIR\s=','PROJECT_DIR = os.path.dirname(os.path.abspath(__file__)) #'
     Set-Content -Path "$dir/$name/basesettings.py" -Value $file
 
+    cp "$templDir/_.gitignore" "$dir/.gitignore"
+    if(!$?){throw "Copy .gitignore failed"}
+
     cp "$templDir/manage-app.py" "$dir/$name/manage-app.py"
     if(!$?){throw "Copy manage-app.py failed"}
 
