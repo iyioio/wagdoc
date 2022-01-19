@@ -316,11 +316,23 @@ function ApplyServiceAccount{
 
 }
 
+function CreateDb{
+
+    Write-Host "CreateDb" -ForegroundColor Cyan
+
+    gcloud sql databases describe $config.dbName --instance $config.dbInstance 2>&1 | Out-Null
+
+    if(!$?){
+        gcloud sql databases create $config.dbName --instance $config.dbInstance
+        if(!$?){throw "create db failed"}
+    }
+}
+
 function CreateDbUser{
 
     Write-Host "CreateDbUser" -ForegroundColor Cyan
 
-    $existing=gcloud sql users list --instance alfasql --filter $config.dbUser --format "value(name)"
+    $existing=gcloud sql users list --instance $config.dbInstance --filter $config.dbUser --format "value(name)"
 
     if($existing){
         if($recreateDbuser){
@@ -495,34 +507,38 @@ try{
     }
 
     if($step -eq -1 -or $step -eq 6){
-        CreateDbUser
+        CreateDb
     }
 
     if($step -eq -1 -or $step -eq 7){
-        CreateBucket
+        CreateDbUser
     }
 
     if($step -eq -1 -or $step -eq 8){
-        ConfigureBucket
+        CreateBucket
     }
 
     if($step -eq -1 -or $step -eq 9){
-        CreateConector
+        ConfigureBucket
     }
 
     if($step -eq -1 -or $step -eq 10){
-        Deploy
+        CreateConector
     }
 
     if($step -eq -1 -or $step -eq 11){
-        EnablePublic
+        Deploy
     }
 
     if($step -eq -1 -or $step -eq 12){
-        Migrate
+        EnablePublic
     }
 
     if($step -eq -1 -or $step -eq 13){
+        Migrate
+    }
+
+    if($step -eq -1 -or $step -eq 14){
         CollectStatic
     }
 
