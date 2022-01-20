@@ -148,12 +148,12 @@ pwsh wagdoc.ps1 -configPath ./example-config.json -getAdminLogin
 ## Command arguments
 
 
-### -configPath **(required)**
+### -configPath [Path to config file] **(required)**
 Path to a configuration file
 
 <br/>
 
-### -step
+### -step [Step number 1 - 14]
 Specifies a step to run
 
 <br/>
