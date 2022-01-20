@@ -1,9 +1,15 @@
 # Wagdoc
 An easy way to deploy Wagtail to GCloud using Cloud Run.
 
+<br/><br/>
+
+
 ## What does Wagdoc do?
 In summary Wagdoc deploys a Wagtail site as a Google Cloud Run service that connects to a Google
 Cloud SQL database and uses a Google Cloud Storage bucket for file storage.
+
+<br/><br/>
+
 
 ## Config
 Wagdoc uses a single JSON configuration file.
@@ -53,6 +59,9 @@ Wagdoc uses a single JSON configuration file.
 }
 ```
 
+<br/><br/>
+
+
 ## Cloud SQL configuration
 Before using Wagdoc you should already have a Cloud SQL instance setup with a private IP.
 - Enable billing for your project. ( Cloud SQL is a paid service ) - https://console.cloud.google.com/billing/projects
@@ -70,6 +79,8 @@ Before using Wagdoc you should already have a Cloud SQL instance setup with a pr
 - Configure the remaining options to fit your needs. Remember you can always upgrade an instance.
 - Once the instances is ready use the Private IP as the dbHost in your config file.
 
+<br/><br/>
+
 
 ## What Google Cloud resources are created
 Wagdoc creates the follow google cloud resources
@@ -80,6 +91,9 @@ Wagdoc creates the follow google cloud resources
 - A storage bucket to store static and uploaded files
 - A virtual network connector to connect Wagtail to a Cloud SQL instance. An existing connector can be used.
 - A Wagtail container image
+
+<br/><br/>
+
 
 ## Steps
 Wagdoc preforms the following steps in the listed order. The steps can be ran as a single call to the
@@ -113,6 +127,26 @@ Wagdoc script or preformed individually.
 
 14. Collects Wagtail static files in the cloud
 
+<br/><br/>
+
+
+## Install Powershell
+
+### Mac
+``` sh
+brew install --cask powershell
+```
+
+### Linux - apt-get
+``` sh
+sudo apt-get install -y powershell
+```
+
+### Everybody else
+https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7.2
+
+<br/><br/>
+
 
 ## Usage
 
@@ -145,8 +179,12 @@ Get admin login
 pwsh wagdoc.ps1 -configPath ./example-config.json -getAdminLogin
 ```
 
+<br/><br/>
+
+
 ## Command arguments
 
+<br/>
 
 ### -configPath [Path to config file] **(required)**
 Path to a configuration file
