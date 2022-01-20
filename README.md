@@ -44,7 +44,8 @@ Wagdoc uses a single JSON configuration file.
     // does not exists the connector will be created using the configured ipRange
     "connector":"default-europe-west1",
 
-    // ip range to use with creating a new virtual network connector
+    // ip range to use with creating a new virtual network connector. 10.8.0.0/28 Should work well
+    // for new projects
     "ipRange":"10.8.0.0/28",
 
     // If true Wagtail be configured to run in Debug mode
