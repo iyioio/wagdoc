@@ -131,7 +131,7 @@ every step
 ``` sh
 
 # login and set project and region
-pwsh wagdoc.ps1 -configPath
+pwsh wagdoc.ps1 -configPath ./example-config.json
 
 # run step 2
 pwsh wagdoc.ps1 -configPath ./example-config.json -noLogin -skipSetProjectRegion -step 2
