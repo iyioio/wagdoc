@@ -140,6 +140,11 @@ pwsh wagdoc.ps1 -configPath ./example-config.json -noLogin -skipSetProjectRegion
 pwsh wagdoc.ps1 -configPath ./example-config.json -noLogin -skipSetProjectRegion -step N
 ```
 
+Get admin login
+``` sh
+pwsh wagdoc.ps1 -configPath ./example-config.json -getAdminLogin
+```
+
 ## Command arguments
 
 
@@ -155,6 +160,11 @@ Specifies a step to run
 
 ### -allSteps
 Runs all steps
+
+<br/>
+
+### -getAdminLogin
+Prints the Wagtail admin login URL, username and password
 
 <br/>
 

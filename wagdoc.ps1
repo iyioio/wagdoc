@@ -8,6 +8,7 @@ param(
     [switch]$deployNoBuild,
     [switch]$getSecrets,
     [switch]$getUrl,
+    [switch]$getAdminLogin,
     [switch]$getServiceInfo,
     [switch]$overrideTemplate,
     [switch]$skipSetProjectRegion
@@ -576,16 +577,24 @@ try{
         CollectStatic
     }
 
-    if($getSecrets -or $allSteps){
+    if($getSecrets){
         LoadSecrets -print
     }
 
-    if($getUrl -or $allSteps){
+    if($getUrl){
         GetServiceInfo -prop url
     }
 
     if($getServiceInfo){
         GetServiceInfo
+    }
+
+    if($getAdminLogin -or $allSteps){
+        $url=GetServiceInfo -prop url
+        $vars=LoadSecrets -returnVars
+        Write-Host "$url/admin/login/?next=/admin/"
+        Write-Host "username: admin"
+        Write-Host "password: $($vars.WAG_ADMIN_PASSWORD)"
     }
 
 }finally{
