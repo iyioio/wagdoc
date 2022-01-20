@@ -7,18 +7,19 @@ import environ
 # Import the original settings from each template
 from .settings_base import *
 
-try:
-    from .settings_local import *
-except ImportError:
-    pass
-
 env = environ.Env()
+
+if '[[APP_NAME]]' not in INSTALLED_APPS:
+    INSTALLED_APPS += ['[[APP_NAME]]'] # for custom data migration
+
+if 'wagtail.api.v2' not in INSTALLED_APPS:
+    INSTALLED_APPS += ['wagtail.api.v2']
+
+ALLOWED_HOSTS = ["*"]
 
 if env('WAG_USE_CONFIG', default='0') == "1" :
 
     environ.Env.read_env("/appvar/.env")
-
-    appName=env('WAG_APP_NAME')
 
     SECRET_KEY = env("SECRET_KEY")
 
@@ -33,15 +34,8 @@ if env('WAG_USE_CONFIG', default='0') == "1" :
         }
     }
 
-    ALLOWED_HOSTS = ["*"]
 
     DEBUG = env("WAG_DEBUG", default=False) == '1'
-
-    if appName not in INSTALLED_APPS:
-        INSTALLED_APPS += [appName] # for custom data migration
-
-    if 'wagtail.api.v2' not in INSTALLED_APPS:
-        INSTALLED_APPS += ['wagtail.api.v2']
 
     # Define static storage via django-storages[google]
     GS_BUCKET_NAME = env("WAG_BUCKET_NAME")
@@ -55,3 +49,7 @@ else:
     SECRET_KEY = '__NOT_A_SECRET__'
     DEBUG = True
     
+try:
+    from .settings_local import *
+except ImportError:
+    pass
