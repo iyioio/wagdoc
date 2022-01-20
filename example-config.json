@@ -1,5 +1,5 @@
 {
-    "name":"mywag",
+    "name":"example",
     "project":"my-project",
     "region":"europe-west1",
     "dbEngine":"pgsql",
