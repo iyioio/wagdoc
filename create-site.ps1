@@ -135,14 +135,19 @@ function CreateSiteTemplate{
     echo "/service.yaml" >> "$dir/.dockerignore"
     echo "/deploy-gcloud.sh" >> "$dir/.dockerignore"
     echo "/cors.json" >> "$dir/.dockerignore"
+    echo "/$name/settings_local.py" >> "$dir/.dockerignore"
     echo "/.env-secrets" >> "$dir/.dockerignore"
 
     $file=Get-Content -Path "$dir/$name/settings/base.py" -Raw
     $file=$file -replace 'PROJECT_DIR\s=','PROJECT_DIR = os.path.dirname(os.path.abspath(__file__)) #'
-    Set-Content -Path "$dir/$name/basesettings.py" -Value $file
+    Set-Content -Path "$dir/$name/settings_base.py" -Value $file
 
     cp "$templDir/_.gitignore" "$dir/.gitignore"
     if(!$?){throw "Copy .gitignore failed"}
+
+    echo "settings_local.py" >> "$dir/$name/.gitignore"
+
+    echo '# Put local developer settings in this file' >> "$dir/$name/settings_local.py"
 
     cp "$templDir/api.py" "$dir/$name/api.py"
     if(!$?){throw "Copy api.py failed"}

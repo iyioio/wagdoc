@@ -5,7 +5,12 @@ from urllib.parse import urlparse
 import environ
 
 # Import the original settings from each template
-from .basesettings import *
+from .settings_base import *
+
+try:
+    from .settings_local import *
+except ImportError:
+    pass
 
 env = environ.Env()
 
