@@ -83,7 +83,7 @@ Wagdoc creates the follow google cloud resources
 
 ## Steps
 Wagdoc preforms the following steps in the listed order. The steps can be ran as a single call to the
-Wagdoc script to preformed individually.
+Wagdoc script or preformed individually.
 
 1. Creates a Wagtail site template configured to be deploy on Google Could Run or ran locally
 
@@ -126,9 +126,8 @@ Run a single step
 pwsh wagdoc.ps1 -configPath ./example-config.json -step 2
 ```
 
-Run individual steps and and login, set project and set region once. This is the preferred way of
-Wagdoc when running steps individually since it avoids logging in and setting project and region for
-every step
+Run individual steps and login once. This is the preferred way of using Wagdoc when running steps
+individually since it avoids logging in and setting project and region for every step
 ``` sh
 
 # login and set project and region
@@ -141,7 +140,7 @@ pwsh wagdoc.ps1 -configPath ./example-config.json -noLogin -skipSetProjectRegion
 pwsh wagdoc.ps1 -configPath ./example-config.json -noLogin -skipSetProjectRegion -step N
 ```
 
-## Args
+## Command arguments
 
 
 ### -configPath **(required)**
