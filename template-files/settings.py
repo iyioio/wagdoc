@@ -10,7 +10,7 @@ from .settings_base import *
 env = environ.Env()
 
 if '[[APP_NAME]]' not in INSTALLED_APPS:
-    INSTALLED_APPS += ['[[APP_NAME]]'] # for custom data migration
+    INSTALLED_APPS += ['[[APP_NAME]]']
 
 if 'wagtail.api.v2' not in INSTALLED_APPS:
     INSTALLED_APPS += ['wagtail.api.v2']
