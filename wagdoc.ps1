@@ -11,9 +11,16 @@ param(
     [switch]$getAdminLogin,
     [switch]$getServiceInfo,
     [switch]$overrideTemplate,
-    [switch]$skipSetProjectRegion
+    [switch]$skipSetProjectRegion,
+    [switch]$migrate
 )
 $ErrorActionPreference="Stop"
+
+$migrateStepIndex=13
+
+if($migrate){
+    $step=$migrateStepIndex
+}
 
 if($allSteps){
     $step=-1
@@ -138,6 +145,8 @@ function CreateSiteTemplate{
     echo "/cors.json" >> "$dir/.dockerignore"
     echo "/$name/settings_local.py" >> "$dir/.dockerignore"
     echo "/.env-secrets" >> "$dir/.dockerignore"
+    echo "/gcloud-manage.ps1" >> "$dir/.dockerignore"
+    echo "/add-migration.sh" >> "$dir/.dockerignore"
 
     $file=Get-Content -Path "$dir/$name/settings/base.py" -Raw
     $file=$file -replace 'PROJECT_DIR\s=','PROJECT_DIR = os.path.dirname(os.path.abspath(__file__)) #'
@@ -212,6 +221,14 @@ function CreateSiteTemplate{
     $deployScript=$deployScript.Replace('[[IMAGE]]',"gcr.io/$($config.project)/$name-image:latest")
     Set-Content -Path "$dir/deploy-gcloud.sh" -Value $deployScript
     chmod +x "$dir/deploy-gcloud.sh"
+
+    cp "$templDir/gcloud-manage.ps1" "$dir/gcloud-manage.ps1"
+    if(!$?){throw "Copy gcloud-manage.ps1 failed"}
+    chmod +x "$dir/gcloud-manage.ps1"
+
+    cp "$templDir/add-migration.sh" "$dir/add-migration.sh"
+    if(!$?){throw "Copy add-migration.sh failed"}
+    chmod +x "$dir/add-migration.sh"
 
 }
 
@@ -569,7 +586,7 @@ try{
         EnablePublic
     }
 
-    if($step -eq -1 -or $step -eq 13){
+    if($step -eq -1 -or $step -eq $migrateStepIndex){
         Migrate
     }
 

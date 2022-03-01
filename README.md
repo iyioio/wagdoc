@@ -244,3 +244,23 @@ Skips setting the current project and region. Useful when running steps one by o
 ### -noLogin
 Skips Google auth login. Useful when running steps one by one
 
+<br/>
+
+### -migrate
+Run any pending migrations
+
+<br/><br/>
+
+## Migrations
+Migrations can be added and applied to created sites using the following steps
+
+1. Make any changes to your models
+
+2. Run the ./add-migration.sh script in the root of the created site
+
+3. Deploy changes using ./deploy-gcloud.sh or pushing to a deployment branch
+
+4. Run the ./gcloud-manage.ps1 script to run the created migration
+``` sh
+./gcloud-manage.ps1 -migrate
+```
